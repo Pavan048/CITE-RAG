@@ -49,75 +49,84 @@ Cite RAG is architected as a unified, high-performance service. Ingestion and re
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#e0f2fe", "primaryBorderColor": "#2563eb", "lineColor": "#0284c7", "fontFamily": "Inter, Arial", "tertiaryColor": "#f8fafc"}}}%%
 flowchart TB
-  classDef client fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a;
-  classDef api fill:#e0f2fe,stroke:#2563eb,stroke-width:2px,color:#0f172a;
-  classDef ingest fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#0f172a;
-  classDef graph fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#0f172a;
-  classDef store fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a;
-  classDef llm fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#0f172a;
+  classDef cClient fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a;
+  classDef cApi fill:#e0f2fe,stroke:#2563eb,stroke-width:2px,color:#0f172a;
+  classDef cIngest fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#0f172a;
+  classDef cAgent fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#0f172a;
+  classDef cStore fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a;
+  classDef cLlm fill:#ffe4e6,stroke:#e11d48,stroke-width:2px,color:#0f172a;
 
-  subgraph ClientLayer["🖥️ Frontend & Client Layer"]
-    UI["React 19 SPA<br/>(Tailwind CSS + Lucide Icons)"]
-    BYOK["BYOK Header<br/>(X-LLM-Key & X-LLM-Model)"]
+  subgraph ClientLayer["Frontend & Client Layer"]
+    UI["React 19 SPA<br/>Tailwind CSS + Lucide Icons"]
+    BYOK["BYOK Header<br/>X-LLM-Key and X-LLM-Model"]
   end
 
-  subgraph APILayer["⚡ FastAPI Application Server"]
+  subgraph APILayer["FastAPI Application Server"]
     Router["FastAPI Gateway (/v1)"]
     DocAPI["/v1/documents"]
     JobAPI["/v1/jobs"]
     QueryAPI["/v1/query & /query/stream"]
   end
 
-  subgraph IngestionEngine["📥 Ingestion Pipeline"]
-    Validator["Synchronous Validator<br/>(PDF Header, Virus Scan, SHA-256)"]
-    Queue["Bounded asyncio.Queue<br/>(Backpressure Guard)"]
-    DoclingSvc["Docling Parser<br/>(OCR, Tables, Cropped Figures)"]
-    Chunker["Hierarchical Chunker<br/>(Sentence-boundary + Parent Block)"]
-    Embedder["BGE-M3 Batch Embedder<br/>(Dense + Sparse Vectors)"]
+  subgraph IngestionEngine["Ingestion Pipeline"]
+    Validator["Synchronous Validator<br/>PDF Header, Virus Scan, SHA-256"]
+    Queue["Bounded asyncio.Queue<br/>Backpressure Guard"]
+    DoclingSvc["Docling Parser<br/>OCR, Tables, Cropped Figures"]
+    Chunker["Hierarchical Chunker<br/>Sentence-boundary + Parent Block"]
+    Embedder["BGE-M3 Batch Embedder<br/>Dense + Sparse Vectors"]
   end
 
-  subgraph RetrievalEngine["🧠 Agentic Retrieval State Machine (LangGraph)"]
-    PlanNode["classify_plan<br/>(Single vs Multi-hop)"]
-    RouteNode["route_retrieve<br/>(Doc Routing + Hybrid RRF)"]
-    AccNode["accumulate<br/>(Evidence Pool Deduplication)"]
-    SuffNode{"sufficiency_check<br/>(Original Query Coverage)"}
-    RerankNode["rerank<br/>(Cross-Encoder Fallback Resilient)"]
-    BudgetNode["context_budget<br/>(Small-to-Large Expansion & Token Cap)"]
-    GenNode["generate_cite<br/>(Streaming + Citation Validation)"]
+  subgraph RetrievalEngine["Agentic Retrieval State Machine - LangGraph"]
+    PlanNode["classify_plan<br/>Single vs Multi-hop"]
+    RouteNode["route_retrieve<br/>Doc Routing + Hybrid RRF"]
+    AccNode["accumulate<br/>Evidence Pool Deduplication"]
+    SuffNode{"sufficiency_check<br/>Original Query Coverage"}
+    RerankNode["rerank<br/>Cross-Encoder Fallback Resilient"]
+    BudgetNode["context_budget<br/>Small-to-Large Expansion & Token Cap"]
+    GenNode["generate_cite<br/>Streaming + Citation Validation"]
   end
 
-  subgraph StorageLayer["💾 Persistence & Vector Index"]
-    QdrantDB[("Qdrant Vector DB<br/>• chunks_collection<br/>• documents_collection")]
-    MongoDB[("MongoDB<br/>• documents metadata<br/>• jobs state & logs")]
+  subgraph StorageLayer["Persistence & Vector Index"]
+    QdrantDB[("Qdrant Vector DB<br/>chunks & documents collections")]
+    MongoDB[("MongoDB<br/>documents metadata & jobs state")]
   end
 
-  subgraph ExternalLLM["🤖 External Model Providers (LiteLLM)"]
-    LiteLLM["LiteLLM Universal Gateway<br/>(OpenAI, Anthropic, Bedrock, Ollama)"]
+  subgraph ExternalLLM["External Model Providers - LiteLLM"]
+    LiteLLM["LiteLLM Universal Gateway<br/>OpenAI, Anthropic, Bedrock, Ollama"]
   end
 
-  UI --> BYOK --> Router
-  Router --> DocAPI & JobAPI & QueryAPI
-  DocAPI --> Validator --> Queue --> DoclingSvc --> Chunker --> Embedder
+  UI --> BYOK
+  BYOK --> Router
+  Router --> DocAPI
+  Router --> JobAPI
+  Router --> QueryAPI
+  DocAPI --> Validator
+  Validator --> Queue
+  Queue --> DoclingSvc
+  DoclingSvc --> Chunker
+  Chunker --> Embedder
   Embedder --> QdrantDB
   Embedder --> MongoDB
   
   QueryAPI --> PlanNode
   PlanNode --> RouteNode
-  RouteNode <--> QdrantDB
+  RouteNode --> QdrantDB
+  QdrantDB --> RouteNode
   RouteNode --> AccNode
   AccNode --> SuffNode
-  SuffNode -- "Insufficient (Hop < 4)" --> RouteNode
-  SuffNode -- "Sufficient or Hop = 4" --> RerankNode
-  RerankNode --> BudgetNode --> GenNode
+  SuffNode -->|Insufficient - Hop under 4| RouteNode
+  SuffNode -->|Sufficient or Hop = 4| RerankNode
+  RerankNode --> BudgetNode
+  BudgetNode --> GenNode
   GenNode --> LiteLLM
   GenNode --> UI
 
-  class UI,BYOK client
-  class Router,DocAPI,JobAPI,QueryAPI api
-  class Validator,Queue,DoclingSvc,Chunker,Embedder ingest
-  class PlanNode,RouteNode,AccNode,SuffNode,RerankNode,BudgetNode,GenNode graph
-  class QdrantDB,MongoDB store
-  class LiteLLM llm
+  class UI,BYOK cClient
+  class Router,DocAPI,JobAPI,QueryAPI cApi
+  class Validator,Queue,DoclingSvc,Chunker,Embedder cIngest
+  class PlanNode,RouteNode,AccNode,SuffNode,RerankNode,BudgetNode,GenNode cAgent
+  class QdrantDB,MongoDB cStore
+  class LiteLLM cLlm
 ```
 
 ---
@@ -131,32 +140,33 @@ The ingestion pipeline handles raw PDF documents, streams them into temporary st
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#fef3c7", "primaryBorderColor": "#f59e0b", "lineColor": "#2563eb", "fontFamily": "Inter, Arial"}}}%%
 flowchart TD
-  classDef step fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a;
-  classDef decision fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#0f172a;
-  classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a;
-  classDef failure fill:#fee2e2,stroke:#ef4444,stroke-width:2px,color:#0f172a;
+  classDef cStep fill:#f8fafc,stroke:#64748b,stroke-width:2px,color:#0f172a;
+  classDef cDecision fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#0f172a;
+  classDef cSuccess fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a;
+  classDef cFailure fill:#fee2e2,stroke:#ef4444,stroke-width:2px,color:#0f172a;
 
   Upload["Incoming PDF Upload Stream"] --> S1["1. Stream to Disk (1MB chunks) + SHA-256 Hash"]
   S1 --> V1{"Validate Header & Format"}
-  V1 -- "Invalid Header (%PDF-)" --> F1["Reject: 400 Bad Request"]
-  V1 -- "Exceeds Size / Pages" --> F2["Reject: 413 / 422 Limit Exceeded"]
-  V1 -- "Valid PDF" --> V2{"Content Hash Already Exists?"}
+  V1 -->|Invalid Header| F1["Reject: 400 Bad Request"]
+  V1 -->|Exceeds Size or Pages| F2["Reject: 413 or 422 Limit Exceeded"]
+  V1 -->|Valid PDF| V2{"Content Hash Already Exists?"}
   
-  V2 -- "Yes (Ready in DB)" --> S_Dedup["Return Existing Document ID<br/>(Skip Re-indexing entirely)"]
-  V2 -- "No (New Content)" --> Enqueue["2. Enqueue into In-Memory Queue<br/>(Bounded Queue: 503 on Backpressure)"]
+  V2 -->|Yes - Ready in DB| S_Dedup["Return Existing Document ID<br/>Skip Re-indexing entirely"]
+  V2 -->|No - New Content| Enqueue["2. Enqueue into In-Memory Queue<br/>Bounded Queue: 503 on Backpressure"]
 
-  Enqueue --> Docling["3. Docling Multimodal Parse<br/>• Structured Markdown Tables<br/>• Per-page OCR Isolation<br/>• Crop Figures & BYOK Caption"]
-  Docling --> Sanitize["4. Prompt Injection Sanitization<br/>(Redact injection keywords to [redacted])"]
-  Sanitize --> Chunking["5. Hierarchical Recursive Chunking<br/>• Target: 512 tokens (12.5% overlap)<br/>• Preserves Parent Section Boundary<br/>• Deterministic UUID5 Point IDs"]
-  Chunking --> DocSummary["6. Whole-Document Summary Generation<br/>(150-250 tokens for coarse routing)"]
-  Chunking & DocSummary --> Embed["7. BGE-M3 Dense + Sparse Embedding<br/>(Batched in groups of 64)"]
-  Embed --> Index["8. Atomic Database Updates<br/>• Qdrant: chunks & documents collections<br/>• MongoDB: doc & job status -> 'ready'"]
+  Enqueue --> Docling["3. Docling Multimodal Parse<br/>Structured Markdown Tables<br/>Per-page OCR Isolation<br/>Crop Figures & BYOK Caption"]
+  Docling --> Sanitize["4. Prompt Injection Sanitization<br/>Redact injection keywords to [redacted]"]
+  Sanitize --> Chunking["5. Hierarchical Recursive Chunking<br/>Target: 512 tokens (12.5% overlap)<br/>Preserves Parent Section Boundary<br/>Deterministic UUID5 Point IDs"]
+  Chunking --> DocSummary["6. Whole-Document Summary Generation<br/>150-250 tokens for coarse routing"]
+  Chunking --> Embed["7. BGE-M3 Dense + Sparse Embedding<br/>Batched in groups of 64"]
+  DocSummary --> Embed
+  Embed --> Index["8. Atomic Database Updates<br/>Qdrant: chunks & documents collections<br/>MongoDB: doc & job status ready"]
   Index --> Ready["Document Fully Ready for Search"]
 
-  class Upload,S1,Enqueue,Docling,Sanitize,Chunking,DocSummary,Embed,Index step
-  class V1,V2 decision
-  class S_Dedup,Ready success
-  class F1,F2 failure
+  class Upload,S1,Enqueue,Docling,Sanitize,Chunking,DocSummary,Embed,Index cStep
+  class V1,V2 cDecision
+  class S_Dedup,Ready cSuccess
+  class F1,F2 cFailure
 ```
 
 ---
@@ -168,41 +178,42 @@ Built on **LangGraph**, the retrieval engine executes an adaptive graph. If a qu
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ede9fe", "primaryBorderColor": "#7c3aed", "lineColor": "#10b981", "fontFamily": "Inter, Arial"}}}%%
 flowchart TD
-  classDef start fill:#e0f2fe,stroke:#2563eb,stroke-width:2px,color:#0f172a;
-  classDef node fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#0f172a;
-  classDef check fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#0f172a;
-  classDef out fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a;
-  classDef stop fill:#fee2e2,stroke:#ef4444,stroke-width:2px,color:#0f172a;
+  classDef cStart fill:#e0f2fe,stroke:#2563eb,stroke-width:2px,color:#0f172a;
+  classDef cProc fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#0f172a;
+  classDef cCheck fill:#fef3c7,stroke:#f59e0b,stroke-width:2px,color:#0f172a;
+  classDef cOut fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a;
+  classDef cStop fill:#fee2e2,stroke:#ef4444,stroke-width:2px,color:#0f172a;
 
-  Q["User Query Input"] --> CP["classify_plan<br/>(Analyzes question complexity)"]
+  Q["User Query Input"] --> CP["classify_plan<br/>Analyzes question complexity"]
   CP --> PlanCheck{"Is Multi-Hop?"}
 
-  PlanCheck -- "Single-Hop" --> RR1["route_retrieve (Hop 1)<br/>• Doc routing via summary vectors<br/>• Dense + Sparse Hybrid Search<br/>• Reciprocal Rank Fusion (RRF k=60)"]
-  PlanCheck -- "Multi-Hop" --> RRM["route_retrieve (Hop N)<br/>• Fresh document routing per hop<br/>• Hybrid Qdrant Search"]
+  PlanCheck -->|Single-Hop| RR1["route_retrieve (Hop 1)<br/>Doc routing via summary vectors<br/>Dense + Sparse Hybrid Search<br/>Reciprocal Rank Fusion RRF k=60"]
+  PlanCheck -->|Multi-Hop| RRM["route_retrieve (Hop N)<br/>Fresh document routing per hop<br/>Hybrid Qdrant Search"]
 
-  RR1 & RRM --> EmptyCheck{"Candidates Found?"}
-  EmptyCheck -- "Hop 1 Miss" --> ShortCircuit["Short Circuit: not_found<br/>(Avoids corpus-wide hallucination)"]
-  EmptyCheck -- "Candidates Exist" --> ACC["accumulate<br/>(Deduplicate by chunk_id into evidence pool)"]
+  RR1 --> EmptyCheck{"Candidates Found?"}
+  RRM --> EmptyCheck
+  EmptyCheck -->|Hop 1 Miss| ShortCircuit["Short Circuit: not_found<br/>Avoids corpus-wide hallucination"]
+  EmptyCheck -->|Candidates Exist| ACC["accumulate<br/>Deduplicate by chunk_id into evidence pool"]
 
   ACC --> PathCheck{"Is Multi-Hop Mode?"}
-  PathCheck -- "No (Fast Path)" --> Rerank["rerank<br/>(Cross-Encoder scoring against original query)"]
-  PathCheck -- "Yes" --> SuffCheck{"sufficiency_check<br/>(Assesses pool vs original query)"}
+  PathCheck -->|No - Fast Path| Rerank["rerank<br/>Cross-Encoder scoring against original query"]
+  PathCheck -->|Yes| SuffCheck{"sufficiency_check<br/>Assesses pool vs original query"}
 
-  SuffCheck -- "Insufficient & Hop < 4" --> Rewrite["rewrite_subquestion<br/>(Formulates targeted follow-up query)"]
+  SuffCheck -->|Insufficient - Hop under 4| Rewrite["rewrite_subquestion<br/>Formulates targeted follow-up query"]
   Rewrite --> RRM
 
-  SuffCheck -- "Sufficient or Hop = 4" --> Rerank
+  SuffCheck -->|Sufficient or Hop = 4| Rerank
   
-  Rerank --> Budget["context_budget<br/>• Swap chunks for full parent sections<br/>• Deduplicate parent blocks<br/>• Enforce 1,800 token budget"]
-  Budget --> GenCite["generate_cite<br/>• Stream tokens via SSE<br/>• Parse [doc_id:page:chunk_id] markers<br/>• Drop hallucinated markers"]
+  Rerank --> Budget["context_budget<br/>Swap chunks for full parent sections<br/>Deduplicate parent blocks<br/>Enforce 1800 token budget"]
+  Budget --> GenCite["generate_cite<br/>Stream tokens via SSE<br/>Parse citation markers<br/>Drop hallucinated markers"]
   ShortCircuit --> GenCite
   GenCite --> FinalAnswer["Final Answer + Verified Citations"]
 
-  class Q start
-  class CP,RR1,RRM,ACC,Rewrite,Rerank,Budget,GenCite node
-  class PlanCheck,EmptyCheck,PathCheck,SuffCheck check
-  class FinalAnswer out
-  class ShortCircuit stop
+  class Q cStart
+  class CP,RR1,RRM,ACC,Rewrite,Rerank,Budget,GenCite cProc
+  class PlanCheck,EmptyCheck,PathCheck,SuffCheck cCheck
+  class FinalAnswer cOut
+  class ShortCircuit cStop
 ```
 
 ---
@@ -214,23 +225,23 @@ Unlike standard RAG systems that display whatever page number the LLM dreams up,
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#dcfce7", "primaryBorderColor": "#16a34a", "lineColor": "#2563eb", "fontFamily": "Inter, Arial"}}}%%
 flowchart LR
-  classDef source fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a;
-  classDef verified fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a;
-  classDef dropped fill:#fee2e2,stroke:#ef4444,stroke-width:2px,color:#0f172a;
-  classDef action fill:#e0f2fe,stroke:#2563eb,stroke-width:2px,color:#0f172a;
+  classDef cSource fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#0f172a;
+  classDef cVerified fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a;
+  classDef cDropped fill:#fee2e2,stroke:#ef4444,stroke-width:2px,color:#0f172a;
+  classDef cAction fill:#e0f2fe,stroke:#2563eb,stroke-width:2px,color:#0f172a;
 
-  LLM["Raw LLM Output Stream<br/>'Solar flares disrupt satellites [doc:p4:c12].'"] --> Parse["Regex Tag Extractor<br/>Finds [doc_id:page:chunk_id]"]
+  LLM["Raw LLM Output Stream<br/>'Solar flares disrupt satellites #91;doc:p4:c12#93;.'"] --> Parse["Regex Tag Extractor<br/>Finds #91;doc_id:page:chunk_id#93;"]
   Parse --> Check{"Does chunk_id exist in<br/>Verified Context Catalog?"}
   
-  Check -- "Match Found" --> ReDerive["Re-derive doc_id and page<br/>from trusted backend state"]
-  ReDerive --> UIChip["Render Verified Citation Chip<br/>• Interactive snippet popover<br/>• Document title & page number"]
+  Check -->|Match Found| ReDerive["Re-derive doc_id and page<br/>from trusted backend state"]
+  ReDerive --> UIChip["Render Verified Citation Chip<br/>Interactive snippet popover<br/>Document title & page number"]
 
-  Check -- "No Match (Hallucination)" --> Strip["Strip Marker Entirely<br/>(Never shown to user)"]
+  Check -->|No Match - Hallucination| Strip["Strip Marker Entirely<br/>Never shown to user"]
 
-  class LLM source
-  class Parse,Check,ReDerive action
-  class UIChip verified
-  class Strip dropped
+  class LLM cSource
+  class Parse,Check,ReDerive cAction
+  class UIChip cVerified
+  class Strip cDropped
 ```
 
 ---

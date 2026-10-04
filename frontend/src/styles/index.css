@@ -1,0 +1,111 @@
+@import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..600;1,9..144,400..500&family=Archivo:wght@400;500;600;700&display=swap");
+
+/* Indirection so these become swappable at runtime (media query / [data-theme]) while still
+   registering as Tailwind v4 design tokens — @theme values are otherwise treated as static. */
+@theme {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-cite: var(--cite);
+  --color-cite-soft: var(--cite-soft);
+  --color-user-bubble: var(--user-bubble);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-success: var(--success);
+  --font-sans: "Archivo", -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Fraunces", Georgia, "Times New Roman", serif;
+}
+
+/* Light palette (default). A cool, slightly green-grey paper — not the warm-cream-plus-serif
+   combination that's become the generic "AI design" default. Teal is the one UI accent; amber
+   ("cite") is spent on exactly one thing, citation marks, and nowhere else — color itself carries
+   meaning here instead of decorating. */
+:root {
+  --bg: #eef0ee;
+  --surface: #ffffff;
+  --surface-hover: #f1f2ef;
+  --border: #dbded7;
+  --fg: #171b18;
+  --fg-muted: #5d6259;
+  --accent: #0e7c86;
+  --accent-hover: #0b6570;
+  --accent-fg: #ffffff;
+  --cite: #a8641e;
+  --cite-soft: rgba(168, 100, 30, 0.12);
+  --user-bubble: #e3eeec;
+  --danger: #b3261e;
+  --danger-bg: #fbeceb;
+  --warn: #8a6100;
+  --warn-bg: #fff6e5;
+  --success: #1e8e3e;
+}
+
+/* Dark palette, applied when the system prefers dark AND the user hasn't explicitly chosen
+   light, or when the user has explicitly chosen dark. An explicit choice always wins over the
+   system preference, in both directions. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10130f;
+    --surface: #1a1e19;
+    --surface-hover: #212620;
+    --border: #333a30;
+    --fg: #e7ebe4;
+    --fg-muted: #99a091;
+    --accent: #3fc1cc;
+    --accent-hover: #56cbd5;
+    --accent-fg: #071417;
+    --cite: #e3a15e;
+    --cite-soft: rgba(227, 161, 94, 0.16);
+    --user-bubble: #1c2b28;
+    --danger: #f2938a;
+    --danger-bg: #3a2220;
+    --warn: #e3b761;
+    --warn-bg: #3a2f16;
+    --success: #6fd08a;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #10130f;
+  --surface: #1a1e19;
+  --surface-hover: #212620;
+  --border: #333a30;
+  --fg: #e7ebe4;
+  --fg-muted: #99a091;
+  --accent: #3fc1cc;
+  --accent-hover: #56cbd5;
+  --accent-fg: #071417;
+  --cite: #e3a15e;
+  --cite-soft: rgba(227, 161, 94, 0.16);
+  --user-bubble: #1c2b28;
+  --danger: #f2938a;
+  --danger-bg: #3a2220;
+  --warn: #e3b761;
+  --warn-bg: #3a2f16;
+  --success: #6fd08a;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+}
+
+@keyframes pulse-dot {
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+
+@keyframes panel-in {
+  from { transform: translateX(12px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}

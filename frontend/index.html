@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cite — PDF Knowledge Base</title>
+    <script>
+      // Applies the stored theme choice before React mounts, so there's no flash of the wrong
+      // theme on first paint. Mirrors hooks/useTheme.ts's applyTheme() logic exactly — keep the
+      // two in sync if that logic ever changes.
+      (function () {
+        try {
+          var stored = localStorage.getItem('pdf-kb-theme')
+          if (stored === 'light' || stored === 'dark') {
+            document.documentElement.setAttribute('data-theme', stored)
+          }
+        } catch (e) {}
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

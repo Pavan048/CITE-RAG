@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1090 880" role="img" aria-label="Cite architecture. Left: the ingestion pipeline runs validate, parse, chunk and summarize, embed, index, in order. Right: the retrieval engine runs classify plan, route and retrieve, accumulate, sufficiency check, rerank, context budget, generate and cite, where sufficiency check loops back to route and retrieve up to four times. Both sides rely on the same shared services underneath: a vector and document store, a self-hosted embedding and reranking service, and the user's own LLM. Retrieval ends in an answer with citations, sent back to the browser.">
+  <rect width="1090" height="880" fill="#f7f8f6" />
+
+  <defs>
+    <marker id="flow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0e7c86" />
+    </marker>
+    <marker id="dep" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b9088" />
+    </marker>
+    <marker id="cite" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a8641e" />
+    </marker>
+  </defs>
+
+  <text x="150" y="26" font-family="Archivo, sans-serif" font-size="12" font-weight="700" letter-spacing="0.5" fill="#0e7c86" text-anchor="middle">INGESTION</text>
+  <text x="850" y="26" font-family="Archivo, sans-serif" font-size="12" font-weight="700" letter-spacing="0.5" fill="#0e7c86" text-anchor="middle">RETRIEVAL</text>
+
+  <!-- ===== left column: ingestion ===== -->
+  <rect x="10" y="46" width="280" height="58" rx="10" fill="#ffffff" stroke="#dbded7" />
+  <text x="150" y="80" text-anchor="middle" font-family="Georgia, serif" font-size="14" fill="#171b18">Upload a PDF</text>
+
+  <rect x="10" y="128" width="280" height="64" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="150" y="156" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Validate</text>
+  <text x="150" y="174" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">size · page count · virus scan</text>
+
+  <rect x="10" y="216" width="280" height="64" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="150" y="244" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Parse</text>
+  <text x="150" y="262" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">text, tables, OCR, figure captions</text>
+
+  <rect x="10" y="304" width="280" height="64" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="150" y="332" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Chunk + summarize</text>
+  <text x="150" y="350" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">parent block kept alongside</text>
+
+  <rect x="10" y="392" width="280" height="64" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="150" y="420" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Embed</text>
+  <text x="150" y="438" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">dense + sparse, batched</text>
+
+  <rect x="10" y="480" width="280" height="64" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="150" y="508" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Index</text>
+  <text x="150" y="526" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">deterministic point ids</text>
+
+  <line x1="150" y1="104" x2="150" y2="124" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+  <line x1="150" y1="192" x2="150" y2="212" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+  <line x1="150" y1="280" x2="150" y2="300" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+  <line x1="150" y1="368" x2="150" y2="388" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+  <line x1="150" y1="456" x2="150" y2="476" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+
+  <!-- ===== right column: retrieval ===== -->
+  <rect x="710" y="46" width="280" height="58" rx="10" fill="#ffffff" stroke="#dbded7" />
+  <text x="850" y="80" text-anchor="middle" font-family="Georgia, serif" font-size="14" fill="#171b18">Ask a question</text>
+
+  <rect x="710" y="128" width="280" height="60" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="850" y="154" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Classify plan</text>
+  <text x="850" y="172" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">single-hop, or break it down</text>
+
+  <rect x="710" y="204" width="280" height="60" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="850" y="230" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Route + retrieve</text>
+  <text x="850" y="248" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">re-runs fresh, every hop</text>
+
+  <rect x="710" y="280" width="280" height="60" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="850" y="306" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Accumulate</text>
+  <text x="850" y="324" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">dedupes into the evidence pool</text>
+
+  <rect x="710" y="356" width="280" height="60" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="850" y="382" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Sufficiency check</text>
+  <text x="850" y="400" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">judged against the original ask</text>
+
+  <rect x="710" y="432" width="280" height="60" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="850" y="458" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Rerank</text>
+  <text x="850" y="476" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">degrades gracefully if down</text>
+
+  <rect x="710" y="508" width="280" height="60" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="850" y="534" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Context budget</text>
+  <text x="850" y="552" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">chunk swapped for full section</text>
+
+  <rect x="710" y="584" width="280" height="60" rx="10" fill="#eef3f2" stroke="#0e7c86" />
+  <text x="850" y="610" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="600" fill="#0e7c86">Generate + cite</text>
+  <text x="850" y="628" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">every citation checked, after</text>
+
+  <line x1="850" y1="104" x2="850" y2="124" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+  <line x1="850" y1="188" x2="850" y2="200" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+  <line x1="850" y1="264" x2="850" y2="276" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+  <line x1="850" y1="340" x2="850" y2="352" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+  <line x1="850" y1="416" x2="850" y2="428" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+  <line x1="850" y1="492" x2="850" y2="504" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+  <line x1="850" y1="568" x2="850" y2="580" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+
+  <!-- the loop: sufficiency check back to route + retrieve -->
+  <path d="M 990 386 C 1030 386, 1030 234, 990 234" fill="none" stroke="#0e7c86" stroke-width="1.8" marker-end="url(#flow)" />
+  <text x="1055" y="310" font-family="Archivo, sans-serif" font-size="11" fill="#0e7c86" text-anchor="middle" transform="rotate(90 1055 310)">not enough yet, hop &lt; 4</text>
+
+  <!-- ===== shared services, one plain band underneath both ===== -->
+  <line x1="150" y1="544" x2="150" y2="680" stroke="#8b9088" stroke-width="1.4" stroke-dasharray="1 5" marker-end="url(#dep)" />
+  <line x1="850" y1="644" x2="850" y2="680" stroke="#8b9088" stroke-width="1.4" stroke-dasharray="1 5" marker-end="url(#dep)" />
+  <text x="500" y="668" text-anchor="middle" font-family="Archivo, sans-serif" font-size="11" fill="#8b9088">both sides read and write the same shared services</text>
+
+  <rect x="60" y="690" width="270" height="62" rx="10" fill="#ffffff" stroke="#dbded7" />
+  <text x="195" y="716" text-anchor="middle" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="#171b18">Vector + document store</text>
+  <text x="195" y="734" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">Qdrant + MongoDB</text>
+
+  <rect x="365" y="690" width="270" height="62" rx="10" fill="#ffffff" stroke="#dbded7" />
+  <text x="500" y="716" text-anchor="middle" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="#171b18">Embedding + reranker</text>
+  <text x="500" y="734" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">self-hosted</text>
+
+  <rect x="670" y="690" width="270" height="62" rx="10" fill="#ffffff" stroke="#dbded7" />
+  <text x="805" y="716" text-anchor="middle" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="#171b18">Your LLM</text>
+  <text x="805" y="734" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#5d6259">bring your own key</text>
+
+  <!-- output: routed down the far right, clear of the shared-services band, into its own box -->
+  <path d="M 990 614 L 990 800 L 630 800" fill="none" stroke="#a8641e" stroke-width="1.9" marker-end="url(#cite)" />
+
+  <rect x="330" y="770" width="300" height="62" rx="10" fill="#fdf6ee" stroke="#a8641e" stroke-width="1.5" />
+  <text x="480" y="796" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-size="14" fill="#a8641e">Answer, with citations</text>
+  <text x="480" y="814" text-anchor="middle" font-family="Archivo, sans-serif" font-size="10.5" fill="#8b6a3f">streamed back to the browser</text>
+</svg>

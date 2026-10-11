@@ -73,6 +73,9 @@ a SHA-256 hash computed incrementally over the same stream. Once the upload fini
 - If `virus_scan_enabled` is on, the file is streamed to a ClamAV daemon over a socket
   (`clamd.instream`) for scanning — off by default in this environment since there's no ClamAV
   daemon to talk to, but the code path is real, not a stub.
+- If the caller passes the `X-Replace-Existing: true` header, all existing ready documents with the
+  same filename have their Qdrant vectors and MongoDB records evicted, and the semantic cache is
+  invalidated before the new document is queued.
 
 Only after all of that passes does content-hash dedup get checked, against
 `find_ready_document_by_content_hash` in MongoDB. A match means this exact file already exists and
@@ -103,8 +106,10 @@ internally — a page whose backend fails to load gets marked invalid, and the o
 degrades to `PARTIAL_SUCCESS` rather than the whole conversion raising. `docling_service.py` leans
 on that instead of re-implementing per-page isolation by hand. `pages_failed` is built by checking
 `page._backend is None or not page._backend.is_valid()` for each page in the result, converting
-Docling's 0-indexed `page_no` to the 1-indexed page numbers used everywhere else in this system —
-get that offset wrong and every citation and every failed-page report is off by one.
+Docling's 0-indexed `page_no` to the 1-indexed page numbers used everywhere else in this system.
+Furthermore, `docling_service.py` performs a completeness validation against the expected physical
+page count (from Stage 1) to catch silent parser truncation — any trailing missing pages are flagged
+and added to `pages_failed`.
 
 The parsed document is then walked item by item via `doc.iterate_items()`:
 
@@ -141,8 +146,13 @@ group, and one group becomes one parent block with its own fresh UUID. If the sa
 ever reappears later in a weird document, it starts a *new* parent block rather than merging into
 the earlier one — sections are about contiguous position, not matching text.
 
-Tables and image captions are already atomic — each becomes exactly one chunk, never merged into
-the surrounding prose. Plain text elements go through actual recursive splitting:
+Structural element handling:
+- **Image captions**: Atomic — each becomes exactly one chunk.
+- **Markdown tables**: Preserved intact up to `table_max_tokens` (1024 tokens). If a table exceeds
+  this limit, `_split_table_rows()` splits it strictly on row boundaries (`\n|`) and prepends the
+  markdown header rows (`| Col 1 | Col 2 |...`) onto every chunk piece. This ensures retrieved
+  table chunks never lose their column headers, while the full table remains preserved in the parent block.
+- **Plain text**: Goes through actual recursive splitting:
 
 1. `_split_oversized_unit()` — if a single paragraph is already small enough, it's left alone. If
    not, it's split at sentence boundaries. If a single *sentence* is still too long, it's hard-sliced
@@ -153,6 +163,7 @@ the surrounding prose. Plain text elements go through actual recursive splitting
 
 Each window is tagged with the page number of whichever unit it *starts* with, so a window that
 happens to straddle a page break is cited to where it begins.
+
 
 Chunk IDs are not random. They're `uuid5(NAMESPACE_URL, f"{doc_id}:{chunk_index}")` — deterministic,
 derived from the document and the chunk's position. That one choice is what makes retries safe: if
@@ -355,3 +366,59 @@ from LangGraph's own `stream_mode=["updates", "values"]`, which is the actual re
 Alongside it: every hop's retrieved chunks, the final reranked set, and every single LLM call's
 full prompt and response. None of this is part of the documented API contract — it's an
 observability layer added on top of it.
+
+---
+
+## Semantic Caching & Economics
+
+`app/services/semantic_cache.py`, `app/models/token_usage.py`
+
+### Scope-Aware Semantic Cache
+
+Before entering the retrieval graph, queries consult an in-process LRU cache keyed by the dense
+embedding vector of the question:
+
+- **Cosine similarity threshold**: Matches queries with cosine similarity $\ge 0.97$. This conservative
+  ceiling ensures that only semantically identical queries hit the cache, avoiding false hits on
+  subtly different questions.
+- **Scope partitioning**: Cache buckets are partitioned by the sorted `file_ids` parameter. Query A
+  scoped to `doc-1` will never return a cached response generated for `doc-2` or the global corpus.
+- **Eviction & invalidation**: Entries carry monotonic TTL timestamps (`semantic_cache_ttl_seconds`).
+  Furthermore, deleting any document via `DELETE /v1/documents/{id}` or uploading a replacement version
+  via `X-Replace-Existing` immediately evicts the cached entries.
+- **Zero latency & cost**: Cache hits bypass vector search, cross-encoders, and LLMs entirely, returning
+  in `< 5ms` with `0` tokens consumed and `$0.00` spend.
+
+### Multi-Hop Token & Cost Aggregation
+
+Every LLM interaction throughout the graph extracts prompt and completion token counts from the
+provider's `response.usage` block:
+
+- **State reducers**: `RetrievalState` accumulates `token_usage_prompt` and `token_usage_completion`
+  using LangGraph's `Annotated[int, operator.add]` reducers across all loop hops.
+- **Cost estimation**: `estimate_cost_usd()` computes estimated USD charges based on the active
+  model identifier (e.g. GPT-4o-mini, GPT-4o, Claude 3.5 Sonnet, Claude 3 Haiku).
+- **Surface**: Aggregated token counts and USD costs are surfaced in `TokenSummary` within both
+  `DebugInfo` and the top-level `QueryResponse`.
+
+---
+
+## Offline Evaluation Harness
+
+`app/eval/runner.py`, `app/eval/golden_set/samples.jsonl`
+
+To guard against regressions during prompt tuning, model upgrades, or chunking adjustments, CITE-RAG
+includes an offline evaluation benchmark suite:
+
+- **Curated Golden Benchmarks**: `samples.jsonl` defines ground-truth queries covering single-hop facts,
+  multi-hop reasoning across documents, tabular numerical extraction, and out-of-scope questions.
+- **Automated Runner**: Executes the benchmark against the full retrieval graph and computes:
+  - `avg_keyword_recall`: Fraction of expected core keywords present in the generated answer.
+  - `out_of_scope_abstention_accuracy`: Verifies that out-of-scope questions cleanly trigger `not_found`
+    rather than hallucinating ungrounded assertions.
+  - `avg_latency_ms`, `total_tokens`, and `total_cost_usd`.
+- **CLI Interface**: Can be triggered directly in CI or local development via:
+  ```bash
+  python -m app.eval.runner --api-key sk-your-key
+  ```
+

@@ -34,11 +34,15 @@ Every factual assertion delivered to the user is grounded in exact source docume
 |---|---|---|
 | **Multi-Document Synthesis** | Fails on cross-document comparative or multi-step questions | **Agentic Multi-Hop Reasoning** decomposes queries, evaluates context sufficiency, and dynamically formulates sub-queries (up to 4 hops) |
 | **Retrieval Strategy** | Dense-only semantic search prone to keyword misses | **Two-Stage Hybrid Search**: Dense + Sparse (BGE-M3) fused via RRF ($k=60$) followed by Cross-Encoder Reranker |
+| **Semantic Caching** | Every repeated or rephrased query pays full embedding and LLM latency/cost | **Scope-Aware Semantic Cache**: In-process LRU cache keyed by embedding cosine similarity ($\ge 0.97$) with `file_ids` scope isolation and auto-eviction on document deletion |
 | **Contextual Precision** | Blind chunking produces chopped-off sentences or missing context | **Hierarchical Chunking**: Retrieves precise 512-token chunks, but expands them to complete parent sections for LLM synthesis |
+| **Table Understanding** | Slices tables mid-row, separating column headers from data | **Table-Aware Row Preservation**: Preserves tables whole up to 1024 tokens; slices oversized tables on row boundaries (`\n|`) and duplicates headers on every piece |
 | **Citation Integrity** | Blind trust in LLM citations; hallucinated page references | **Strict Citation Enforcement**: Re-derives and validates every sentence-level `[doc:page:chunk]` token; drops unbacked claims |
 | **Key & Privacy Security** | Centralized API keys stored in server databases | **Zero-Retention BYOK**: `X-LLM-Key` is request-scoped, stored only in RAM during execution, and never written to disk or database |
-| **PDF Understanding** | Flat text dump; destroys tables, figures, and structural layout | **IBM Docling Integration**: Extracts structured markdown tables, page-level OCR, and LLM-captioned figures |
-| **Ingestion Resilience** | Process-crashing unhandled exceptions; duplicated points | **Deterministic UUID5 Point IDs**, SHA-256 content deduplication, and isolated per-page failure recovery |
+| **Cost & Token Tracking** | Blind token consumption across multi-hop iterations | **Aggregated Token & Cost Economics**: Tracks prompt/completion tokens per hop with `operator.add` reducers; surfaces USD spend in `TokenSummary` |
+| **PDF Understanding** | Flat text dump; destroys tables, figures, and structural layout | **IBM Docling Integration**: Extracts structured markdown tables, page-level OCR, completeness checks, and LLM-captioned figures |
+| **Ingestion Resilience** | Process-crashing unhandled exceptions; duplicated points | **Deterministic UUID5 Point IDs**, SHA-256 content deduplication, `X-Replace-Existing` version eviction, and isolated per-page recovery |
+| **Embedding Drift** | Model version updates corrupt existing vector collections | **Startup Drift Detection**: Stores model version on documents and warns on startup if active embedding model diverges |
 
 ---
 
@@ -450,12 +454,13 @@ Cite RAG is engineered around a zero-trust model for user API keys:
 
 ### 1. Upload & Ingest Document
 
-Upload a PDF document with your dynamic BYOK key:
+Upload a PDF document with your dynamic BYOK key. Pass `X-Replace-Existing: true` to automatically evict and replace any previous version(s) of the same file:
 
 ```bash
 curl -X POST "http://localhost:8000/v1/documents" \
   -H "X-LLM-Key: sk-your-llm-api-key" \
   -H "X-LLM-Model: openai/gpt-4o-mini" \
+  -H "X-Replace-Existing: true" \
   -F "file=@sample_paper.pdf"
 ```
 
@@ -504,42 +509,49 @@ curl -N -X POST "http://localhost:8000/v1/query/stream" \
   -H "X-LLM-Key: sk-your-llm-api-key" \
   -H "X-LLM-Model: openai/gpt-4o-mini" \
   -d '{
-    "query": "Compare the evaluation results in Table 2 with the baseline in Section 4",
+    "question": "Compare the evaluation results in Table 2 with the baseline in Section 4",
     "top_k": 10
   }'
 ```
 
 **Streamed Events:**
-- `event: text` &rarr; Plain answer tokens
-- `event: debug` &rarr; Full debug trace with graph path, latency, and retrieved chunk metadata
-- `event: done` &rarr; Final grounded answer payload with verified citations:
+- `event: token` &rarr; Plain answer tokens
+- `event: done` &rarr; Final grounded answer payload with verified citations and economics:
 
 ```json
 {
-  "answer": "The proposed architecture achieved a 14.2% higher context recall compared to the baseline [1].",
+  "answer": "The proposed architecture achieved a 14.2% higher context recall compared to the baseline [doc-1:6:chunk-14].",
   "citations": [
     {
-      "citation_id": 1,
       "doc_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-      "filename": "sample_paper.pdf",
       "page_number": 6,
+      "chunk_id": "chunk-14",
       "snippet": "Table 2: Comparative context recall across multi-hop benchmarks..."
     }
   ],
-  "is_multi_hop": true,
-  "hops_count": 2,
-  "graph_path": ["classify_plan", "route_retrieve", "accumulate", "sufficiency_check", "route_retrieve", "accumulate", "sufficiency_check", "rerank", "context_budget"]
+  "routed_docs": ["9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"],
+  "partial_answer": false,
+  "token_summary": {
+    "prompt_tokens": 1284,
+    "completion_tokens": 162,
+    "total_tokens": 1446,
+    "llm_calls_count": 3,
+    "estimated_cost_usd": 0.000289
+  }
 }
 ```
 
+> [!TIP]
+> **Semantic Caching**: Subsequent queries with cosine similarity $\ge 0.97$ hit the in-process semantic cache immediately, returning the answer in `< 5ms` with `0` tokens and `$0.00` spend.
+
 ---
 
-## 🧪 Running Automated Tests
+## 🧪 Running Automated Tests & Offline Evaluation
 
-Cite RAG includes an extensive test suite verifying end-to-end ingestion, multi-hop reasoning, graceful error degradation, and zero key leakage:
+Cite RAG includes an extensive test suite verifying end-to-end ingestion, multi-hop reasoning, graceful error degradation, and an automated offline evaluation benchmark runner:
 
 ```bash
-# Run the entire test suite
+# Run unit & integration test suite
 pytest tests/ -v
 
 # Run zero-key-leakage verification tests
@@ -547,19 +559,28 @@ pytest tests/integration/test_llm_key_never_leaks.py -v
 
 # Run multi-hop retrieval graph tests
 pytest tests/integration/test_retrieval_multi_hop.py -v
+
+# Run offline evaluation benchmark against golden dataset
+python -m app.eval.runner --api-key sk-your-llm-api-key
 ```
 
 ---
 
-## 🗺️ Roadmap & Planned Enhancements
+## 🗺️ Roadmap & Completed Milestones
 
 - [x] Hierarchical small-to-large chunk expansion with parent-section preservation
-- [x] Multi-hop iterative reasoning loop via LangGraph
+- [x] Multi-hop iterative reasoning loop via LangGraph with hop cap & sufficiency checks
 - [x] Reciprocal Rank Fusion (RRF) with cross-encoder reranking
 - [x] IBM Docling integration with page fault tolerance and image captioning
+- [x] Table row-boundary splitting with column header preservation (`app/ingestion/chunk.py`)
+- [x] Parser completeness cross-validation against PDF physical page count
+- [x] Stale document version eviction via `X-Replace-Existing` header
+- [x] Startup embedding drift detection and alerting
+- [x] Scope-aware in-process LRU semantic caching (`app/services/semantic_cache.py`)
+- [x] Multi-hop prompt/completion token accumulation and USD cost tracking
+- [x] Offline evaluation benchmark runner & golden dataset (`app/eval/runner.py`)
 - [x] Zero-retention BYOK security layer
-- [ ] Offline Ragas evaluation benchmark suite
-- [ ] Distributed Celery/Redis worker fleet mode for enterprise clustering
+- [ ] Distributed Celery/Redis worker fleet mode for multi-node clustering
 - [ ] Direct export of synthesized reports with embedded PDF snippets
 
 ---
@@ -567,3 +588,4 @@ pytest tests/integration/test_retrieval_multi_hop.py -v
 ## 📄 License
 
 This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+

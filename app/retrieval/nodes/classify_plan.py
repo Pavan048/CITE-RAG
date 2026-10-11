@@ -14,13 +14,13 @@ from app.services.llm_client import llm_client
 
 def classify_plan_node(state: RetrievalState) -> dict:
     prompt = prompt_provider.get("retrieval.classify_plan", question=state.question)
-    raw = llm_client.complete_text(prompt=prompt, api_key=state.llm_api_key, model=state.llm_model, json_mode=True)
+    raw, usage = llm_client.complete_text(prompt=prompt, api_key=state.llm_api_key, model=state.llm_model, json_mode=True)
     parsed = parse_json_response(raw)
-    trace = [LLMCallRecord(node="classify_plan", prompt=prompt, response=raw)]
+    trace = [LLMCallRecord(node="classify_plan", prompt=prompt, response=raw, prompt_tokens=usage.prompt_tokens, completion_tokens=usage.completion_tokens)]
 
     is_multi_hop = bool(parsed.get("is_multi_hop", False))
     if not is_multi_hop:
-        return {"is_multi_hop": False, "llm_calls": trace}
+        return {"is_multi_hop": False, "llm_calls": trace, "token_usage_prompt": usage.prompt_tokens, "token_usage_completion": usage.completion_tokens}
 
     first_sub_question = parsed.get("first_sub_question") or state.question
     return {
@@ -28,4 +28,6 @@ def classify_plan_node(state: RetrievalState) -> dict:
         "current_sub_question": first_sub_question,
         "sub_question_history": [first_sub_question],
         "llm_calls": trace,
+        "token_usage_prompt": usage.prompt_tokens,
+        "token_usage_completion": usage.completion_tokens,
     }

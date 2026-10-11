@@ -6,7 +6,8 @@ of that only being visible in server logs.
 
 from __future__ import annotations
 
-from app.models.schemas import ChunkTrace, DebugInfo, HopTrace, LLMCallTrace
+from app.models.schemas import ChunkTrace, DebugInfo, HopTrace, LLMCallTrace, TokenSummary
+from app.models.token_usage import estimate_cost_usd
 from app.retrieval.state import EvidenceItem, RetrievalState
 
 
@@ -41,6 +42,18 @@ def build_debug_info(state: RetrievalState, graph_path: list[str]) -> DebugInfo:
         for index, sub_question in enumerate(sub_questions)
     ]
 
+    total_prompt = state.token_usage_prompt
+    total_completion = state.token_usage_completion
+    cost_usd = estimate_cost_usd(state.llm_model, total_prompt, total_completion)
+
+    token_summary = TokenSummary(
+        prompt_tokens=total_prompt,
+        completion_tokens=total_completion,
+        total_tokens=total_prompt + total_completion,
+        llm_calls_count=len(state.llm_calls),
+        estimated_cost_usd=cost_usd,
+    )
+
     return DebugInfo(
         graph_path=graph_path,
         is_multi_hop=state.is_multi_hop,
@@ -50,5 +63,7 @@ def build_debug_info(state: RetrievalState, graph_path: list[str]) -> DebugInfo:
         hops=hops,
         reranked_chunks=[_chunk_trace(item, item.rerank_score or 0.0) for item in state.reranked_evidence],
         context_block_count=len(state.context_blocks),
-        llm_calls=[LLMCallTrace(node=c.node, prompt=c.prompt, response=c.response) for c in state.llm_calls],
+        llm_calls=[LLMCallTrace(node=c.node, prompt=c.prompt, response=c.response, prompt_tokens=c.prompt_tokens, completion_tokens=c.completion_tokens) for c in state.llm_calls],
+        token_summary=token_summary,
     )
+

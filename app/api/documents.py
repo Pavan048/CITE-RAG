@@ -22,6 +22,7 @@ from app.models.mongo_models import DocumentRecord, JobRecord
 from app.models.schemas import DocumentListItem, DocumentStatus, JobError, PipelineStage, UploadDocumentResponse
 from app.services.mongo_client import mongo_service
 from app.services.qdrant_client import qdrant_service
+from app.services.semantic_cache import semantic_cache
 from app.services.virus_scan_service import InfectedFileError, virus_scan_service
 
 router = APIRouter()
@@ -124,3 +125,4 @@ async def list_documents() -> list[DocumentListItem]:
 async def delete_document(doc_id: str) -> None:
     qdrant_service.delete_document(doc_id)
     mongo_service.delete_document(doc_id)
+    semantic_cache.clear()

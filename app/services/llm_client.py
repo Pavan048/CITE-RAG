@@ -27,6 +27,7 @@ from typing import AsyncIterator
 import litellm
 
 from app.config import settings
+from app.models.token_usage import TokenUsage
 
 
 class LLMCallError(Exception):
@@ -48,7 +49,7 @@ class LLMClient:
         api_key: str,
         model: str,
         json_mode: bool = False,
-    ) -> str:
+    ) -> tuple[str, TokenUsage]:
         try:
             response = litellm.completion(
                 model=model,
@@ -59,7 +60,12 @@ class LLMClient:
             )
         except Exception as e:
             raise LLMCallError(_redact(str(e), api_key)) from None
-        return response.choices[0].message.content or ""
+        usage = response.usage
+        token_usage = TokenUsage(
+            prompt_tokens=getattr(usage, 'prompt_tokens', 0) or 0,
+            completion_tokens=getattr(usage, 'completion_tokens', 0) or 0,
+        )
+        return response.choices[0].message.content or "", token_usage
 
     async def stream_text(
         self,

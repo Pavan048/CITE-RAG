@@ -93,6 +93,16 @@ class LLMCallTrace(BaseModel):
     node: str
     prompt: str
     response: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+
+
+class TokenSummary(BaseModel):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    llm_calls_count: int
+    estimated_cost_usd: float = 0.0
 
 
 class DebugInfo(BaseModel):
@@ -105,6 +115,7 @@ class DebugInfo(BaseModel):
     reranked_chunks: list[ChunkTrace]
     context_block_count: int
     llm_calls: list[LLMCallTrace]
+    token_summary: TokenSummary
 
 
 class QueryResponse(BaseModel):
@@ -113,3 +124,4 @@ class QueryResponse(BaseModel):
     routed_docs: list[str] | None = None
     partial_answer: bool
     debug: DebugInfo | None = None
+    token_summary: TokenSummary | None = None

@@ -68,6 +68,8 @@ class LLMCallRecord(BaseModel):
     node: str
     prompt: str
     response: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
 
 
 class RetrievalState(BaseModel):
@@ -140,6 +142,10 @@ class RetrievalState(BaseModel):
 
     # --- Debug trace (not part of the PRD's core state contract — see LLMCallRecord) ---
     llm_calls: Annotated[list[LLMCallRecord], operator.add] = Field(default_factory=list)
+
+    # --- Token usage: accumulated across all hops via operator.add reducer ---
+    token_usage_prompt: Annotated[int, operator.add] = 0
+    token_usage_completion: Annotated[int, operator.add] = 0
 
     # --- Output ---
     answer: str = ""

@@ -16,7 +16,7 @@ from fastapi import APIRouter, Header
 from fastapi.responses import StreamingResponse
 
 from app.config import settings
-from app.models.schemas import QueryRequest, QueryResponse
+from app.models.schemas import QueryRequest, QueryResponse, TokenSummary
 from app.retrieval.debug_trace import build_debug_info
 from app.retrieval.graph import retrieval_graph, retrieval_graph_pre_generation, run_with_trace
 from app.retrieval.nodes.generate_cite import (
@@ -26,7 +26,9 @@ from app.retrieval.nodes.generate_cite import (
     resolve_citations,
 )
 from app.retrieval.state import LLMCallRecord, RetrievalState
+from app.services.embedding_service import embedding_service
 from app.services.llm_client import llm_client
+from app.services.semantic_cache import semantic_cache
 
 router = APIRouter()
 
@@ -57,18 +59,64 @@ async def query(
     llm_model = x_llm_model or settings.default_llm_model
     initial_state = _build_initial_state(body, x_llm_key, llm_model)
 
+    # --- Semantic cache lookup ---
+    # Embed the query for cache lookup. Failure is non-fatal: an unreachable embedding service
+    # here means a cache miss, not a request failure — the full pipeline below handles the same
+    # outage with its own graceful degradation (retrieval_unavailable path).
+    query_embedding: list[float] | None = None
+    try:
+        query_embedding = await asyncio.to_thread(embedding_service.embed_one_dense, body.question)
+        cached = semantic_cache.get(query_embedding, body.file_ids)
+        if cached is not None:
+            return QueryResponse(
+                answer=cached.answer,
+                citations=cached.citations,
+                routed_docs=cached.routed_docs,
+                partial_answer=cached.partial_answer,
+                debug=None,  # cache hits don't have a debug trace
+                token_summary=TokenSummary(
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    total_tokens=0,
+                    llm_calls_count=0,
+                    estimated_cost_usd=0.0,
+                ),
+            )
+    except Exception:
+        pass  # embedding failure → cache miss, proceed normally
+
     # The graph's node functions call synchronous service clients (httpx, pymongo, qdrant-client);
     # running the whole invocation in a thread keeps this route non-blocking for the event loop,
     # same pattern as the ingestion pipeline.
     final_state, graph_path = await asyncio.to_thread(run_with_trace, retrieval_graph, initial_state)
 
-    return QueryResponse(
+    debug_info = build_debug_info(final_state, graph_path)
+    response = QueryResponse(
         answer=final_state.answer,
         citations=final_state.citations,
         routed_docs=_routed_docs(final_state),
         partial_answer=final_state.partial_answer,
-        debug=build_debug_info(final_state, graph_path),
+        debug=debug_info,
+        token_summary=debug_info.token_summary if debug_info else None,
     )
+
+    # --- Semantic cache store ---
+    # Only cache successful (non-empty, non-error) answers. partial_answer results are cached
+    # too — a repeated query won't do better on subsequent hops and would just burn tokens.
+    if query_embedding is not None and final_state.answer and not final_state.retrieval_unavailable:
+        try:
+            semantic_cache.put(
+                query_embedding=query_embedding,
+                file_ids=body.file_ids,
+                answer=final_state.answer,
+                citations=final_state.citations,
+                partial_answer=final_state.partial_answer,
+                routed_docs=_routed_docs(final_state),
+            )
+        except Exception:
+            pass  # cache write failure is never fatal
+
+    return response
 
 
 @router.post("/v1/query/stream")
@@ -89,6 +137,34 @@ async def query_stream(
         # call — did exactly this before this fix, because only the final streaming call had a
         # try/except). Every failure from here on must become a clean `event: error` frame instead.
         try:
+            # --- Semantic cache lookup (streaming path) ---
+            # A cache hit emits a single `done` frame immediately — no tokens stream, but the
+            # client receives the same SSE event shape it would after a real stream, so it can
+            # handle both paths identically. Cache miss falls through to normal generation.
+            query_embedding: list[float] | None = None
+            try:
+                query_embedding = await asyncio.to_thread(embedding_service.embed_one_dense, body.question)
+                cached = semantic_cache.get(query_embedding, body.file_ids)
+                if cached is not None:
+                    payload = QueryResponse(
+                        answer=cached.answer,
+                        citations=cached.citations,
+                        routed_docs=cached.routed_docs,
+                        partial_answer=cached.partial_answer,
+                        debug=None,
+                        token_summary=TokenSummary(
+                            prompt_tokens=0,
+                            completion_tokens=0,
+                            total_tokens=0,
+                            llm_calls_count=0,
+                            estimated_cost_usd=0.0,
+                        ),
+                    )
+                    yield f"event: done\ndata: {payload.model_dump_json()}\n\n"
+                    return
+            except Exception:
+                pass  # embedding failure → cache miss, proceed normally
+
             # Everything up to generation runs exactly like the non-streaming path, just against
             # the pre-generation graph variant (graph.py) — no node's own behavior differs here.
             pre_state, graph_path = await asyncio.to_thread(run_with_trace, retrieval_graph_pre_generation, initial_state)
@@ -106,6 +182,7 @@ async def query_stream(
                     routed_docs=_routed_docs(pre_state),
                     partial_answer=pre_state.partial_answer,
                     debug=debug,
+                    token_summary=debug.token_summary if debug else None,
                 )
                 yield f"event: done\ndata: {payload.model_dump_json()}\n\n"
                 return
@@ -121,11 +198,32 @@ async def query_stream(
             # against the full accumulated text, using the same trusted-lookup logic the blocking
             # node uses.
             cleaned_answer, citations = resolve_citations(accumulated, pre_state.context_blocks)
+            gen_prompt_tokens = max(1, len(prompt) // 4)
+            gen_completion_tokens = max(1, len(accumulated) // 4)
+            try:
+                import tiktoken
+                enc = tiktoken.get_encoding(settings.token_count_encoding)
+                gen_prompt_tokens = len(enc.encode(prompt))
+                gen_completion_tokens = len(enc.encode(accumulated))
+            except Exception:
+                pass
+
             final_state = pre_state.model_copy(
                 update={
                     "answer": cleaned_answer,
                     "citations": citations,
-                    "llm_calls": [*pre_state.llm_calls, LLMCallRecord(node="generate_cite", prompt=prompt, response=accumulated)],
+                    "llm_calls": [
+                        *pre_state.llm_calls,
+                        LLMCallRecord(
+                            node="generate_cite",
+                            prompt=prompt,
+                            response=accumulated,
+                            prompt_tokens=gen_prompt_tokens,
+                            completion_tokens=gen_completion_tokens,
+                        ),
+                    ],
+                    "token_usage_prompt": pre_state.token_usage_prompt + gen_prompt_tokens,
+                    "token_usage_completion": pre_state.token_usage_completion + gen_completion_tokens,
                 }
             )
             debug = build_debug_info(final_state, [*graph_path, "generate_cite"])
@@ -135,8 +233,24 @@ async def query_stream(
                 routed_docs=_routed_docs(final_state),
                 partial_answer=final_state.partial_answer,
                 debug=debug,
+                token_summary=debug.token_summary if debug else None,
             )
             yield f"event: done\ndata: {payload.model_dump_json()}\n\n"
+
+            # --- Semantic cache store (streaming path) ---
+            if query_embedding is not None and cleaned_answer and not pre_state.retrieval_unavailable:
+                try:
+                    semantic_cache.put(
+                        query_embedding=query_embedding,
+                        file_ids=body.file_ids,
+                        answer=cleaned_answer,
+                        citations=citations,
+                        partial_answer=final_state.partial_answer,
+                        routed_docs=_routed_docs(final_state),
+                    )
+                except Exception:
+                    pass  # cache write failure is never fatal
+
         except Exception as e:
             # Same redaction guarantee as llm_client's own errors (the key is already stripped
             # before it ever reaches here) — nothing further to sanitize before showing this to
@@ -148,3 +262,4 @@ async def query_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+

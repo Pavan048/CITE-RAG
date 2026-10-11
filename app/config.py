@@ -68,6 +68,16 @@ class Settings(BaseSettings):
     token_count_encoding: str = Field(default="cl100k_base")
     citation_snippet_max_chars: int = Field(default=280)
 
+    # --- Semantic cache ---
+    # In-process LRU cache keyed by dense embedding cosine similarity. Disabled by default so
+    # first-run behaviour is identical to pre-cache behaviour. Enable via SEMANTIC_CACHE_ENABLED=true.
+    # Threshold of 0.97 is intentionally conservative — near-identical phrasing only, not just
+    # related topics. Lower values increase hit rate but risk returning wrong cached answers.
+    semantic_cache_enabled: bool = Field(default=False)
+    semantic_cache_similarity_threshold: float = Field(default=0.97)
+    semantic_cache_ttl_seconds: int = Field(default=3600)
+    semantic_cache_max_entries: int = Field(default=500)
+
     # --- BYOK LLM (multi-provider via LiteLLM, per Q&A with user) ---
     default_llm_model: str = Field(default="openai/gpt-4o-mini")
     llm_request_timeout_s: float = Field(default=60.0)

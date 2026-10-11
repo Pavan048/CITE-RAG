@@ -31,24 +31,25 @@ def sufficiency_check_node(state: RetrievalState) -> dict:
         sub_question_history=state.sub_question_history,
         evidence_blocks=state.evidence_pool,
     )
-    raw = llm_client.complete_text(prompt=prompt, api_key=state.llm_api_key, model=state.llm_model, json_mode=True)
+    raw, usage1 = llm_client.complete_text(prompt=prompt, api_key=state.llm_api_key, model=state.llm_model, json_mode=True)
     parsed = parse_json_response(raw)
     is_sufficient = bool(parsed.get("sufficient", False))
     missing = parsed.get("missing")
-    trace = [LLMCallRecord(node="sufficiency_check", prompt=prompt, response=raw)]
+    trace = [LLMCallRecord(node="sufficiency_check", prompt=prompt, response=raw, prompt_tokens=usage1.prompt_tokens, completion_tokens=usage1.completion_tokens)]
 
     if is_sufficient:
-        return {"is_sufficient": True, "missing_evidence": None, "llm_calls": trace}
+        return {"is_sufficient": True, "missing_evidence": None, "llm_calls": trace, "token_usage_prompt": usage1.prompt_tokens, "token_usage_completion": usage1.completion_tokens}
 
     if state.hop_count >= settings.hop_cap:
-        return {"is_sufficient": False, "partial_answer": True, "missing_evidence": missing, "llm_calls": trace}
+        return {"is_sufficient": False, "partial_answer": True, "missing_evidence": missing, "llm_calls": trace, "token_usage_prompt": usage1.prompt_tokens, "token_usage_completion": usage1.completion_tokens}
 
     rewrite_prompt = prompt_provider.get(
         "retrieval.rewrite_subquestion", question=state.question, sub_question_history=state.sub_question_history, missing=missing
     )
-    raw_rewrite = llm_client.complete_text(prompt=rewrite_prompt, api_key=state.llm_api_key, model=state.llm_model, json_mode=True)
+    raw_rewrite, usage2 = llm_client.complete_text(prompt=rewrite_prompt, api_key=state.llm_api_key, model=state.llm_model, json_mode=True)
     next_sub_question = parse_json_response(raw_rewrite)["next_sub_question"]
-    trace.append(LLMCallRecord(node="rewrite_subquestion", prompt=rewrite_prompt, response=raw_rewrite))
+    trace.append(LLMCallRecord(node="rewrite_subquestion", prompt=rewrite_prompt, response=raw_rewrite, prompt_tokens=usage2.prompt_tokens, completion_tokens=usage2.completion_tokens))
+    total_usage = usage1 + usage2
 
     return {
         "is_sufficient": False,
@@ -56,4 +57,6 @@ def sufficiency_check_node(state: RetrievalState) -> dict:
         "current_sub_question": next_sub_question,
         "sub_question_history": [next_sub_question],
         "llm_calls": trace,
+        "token_usage_prompt": total_usage.prompt_tokens,
+        "token_usage_completion": total_usage.completion_tokens,
     }

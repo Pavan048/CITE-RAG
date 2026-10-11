@@ -190,4 +190,5 @@ def generate_document_summary(parsed: ParsedDocument, filename: str, llm_api_key
         max_tokens=settings.doc_summary_max_tokens,
     )
     # `llm_api_key` used for exactly this one call, never retained beyond this function (Section 8).
-    return llm_client.complete_text(prompt=prompt, api_key=llm_api_key, model=llm_model)
+    raw, _ = llm_client.complete_text(prompt=prompt, api_key=llm_api_key, model=llm_model)
+    return raw

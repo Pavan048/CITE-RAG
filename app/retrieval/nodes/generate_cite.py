@@ -84,11 +84,13 @@ def generate_cite_node(state: RetrievalState) -> dict:
         return {"answer": NOT_FOUND_ANSWER, "citations": []}
 
     prompt = build_grounded_answer_prompt(state)
-    raw_answer = llm_client.complete_text(prompt=prompt, api_key=state.llm_api_key, model=state.llm_model)
+    raw_answer, usage = llm_client.complete_text(prompt=prompt, api_key=state.llm_api_key, model=state.llm_model)
     cleaned_answer, citations = resolve_citations(raw_answer, state.context_blocks)
 
     return {
         "answer": cleaned_answer,
         "citations": citations,
-        "llm_calls": [LLMCallRecord(node="generate_cite", prompt=prompt, response=raw_answer)],
+        "llm_calls": [LLMCallRecord(node="generate_cite", prompt=prompt, response=raw_answer, prompt_tokens=usage.prompt_tokens, completion_tokens=usage.completion_tokens)],
+        "token_usage_prompt": usage.prompt_tokens,
+        "token_usage_completion": usage.completion_tokens,
     }

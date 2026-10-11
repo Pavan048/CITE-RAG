@@ -69,7 +69,7 @@ flowchart TB
     Router["FastAPI Gateway (/v1)"]
     DocAPI["/v1/documents"]
     JobAPI["/v1/jobs"]
-    QueryAPI["/v1/query & /query/stream"]
+    QueryAPI["/v1/query and /query/stream"]
   end
 
   subgraph IngestionEngine["Ingestion Pipeline"]
@@ -91,8 +91,8 @@ flowchart TB
   end
 
   subgraph StorageLayer["Persistence & Vector Index"]
-    QdrantDB[("Qdrant Vector DB<br/>chunks & documents collections")]
-    MongoDB[("MongoDB<br/>documents metadata & jobs state")]
+    QdrantDB[("Qdrant Vector DB<br/>chunks and documents collections")]
+    MongoDB[("MongoDB<br/>documents metadata and jobs state")]
   end
 
   subgraph ExternalLLM["External Model Providers - LiteLLM"]
@@ -125,12 +125,12 @@ flowchart TB
   GenNode --> LiteLLM
   GenNode --> UI
 
-  class UI,BYOK cClient
-  class Router,DocAPI,JobAPI,QueryAPI cApi
-  class Validator,Queue,DoclingSvc,Chunker,Embedder cIngest
-  class PlanNode,RouteNode,AccNode,SuffNode,RerankNode,BudgetNode,GenNode cAgent
-  class QdrantDB,MongoDB cStore
-  class LiteLLM cLlm
+  class UI,BYOK cClient;
+  class Router,DocAPI,JobAPI,QueryAPI cApi;
+  class Validator,Queue,DoclingSvc,Chunker,Embedder cIngest;
+  class PlanNode,RouteNode,AccNode,SuffNode,RerankNode,BudgetNode,GenNode cAgent;
+  class QdrantDB,MongoDB cStore;
+  class LiteLLM cLlm;
 ```
 
 ---
@@ -150,7 +150,7 @@ flowchart TD
   classDef cFailure fill:#fee2e2,stroke:#ef4444,stroke-width:2px,color:#0f172a;
 
   Upload["Incoming PDF Upload Stream"] --> S1["1. Stream to Disk (1MB chunks) + SHA-256 Hash"]
-  S1 --> V1{"Validate Header & Format"}
+  S1 --> V1{"Validate Header and Format"}
   V1 -->|Invalid Header| F1["Reject: 400 Bad Request"]
   V1 -->|Exceeds Size or Pages| F2["Reject: 413 or 422 Limit Exceeded"]
   V1 -->|Valid PDF| V2{"Content Hash Already Exists?"}
@@ -158,20 +158,21 @@ flowchart TD
   V2 -->|Yes - Ready in DB| S_Dedup["Return Existing Document ID<br/>Skip Re-indexing entirely"]
   V2 -->|No - New Content| Enqueue["2. Enqueue into In-Memory Queue<br/>Bounded Queue: 503 on Backpressure"]
 
-  Enqueue --> Docling["3. Docling Multimodal Parse<br/>Structured Markdown Tables<br/>Per-page OCR Isolation<br/>Crop Figures & BYOK Caption"]
-  Docling --> Sanitize["4. Prompt Injection Sanitization<br/>Redact injection keywords to [redacted]"]
+  Enqueue --> Docling["3. Docling Multimodal Parse<br/>Structured Markdown Tables<br/>Per-page OCR Isolation<br/>Crop Figures and BYOK Caption"]
+  Docling --> Sanitize["4. Prompt Injection Sanitization<br/>Redact adversarial injection keywords"]
   Sanitize --> Chunking["5. Hierarchical Recursive Chunking<br/>Target: 512 tokens (12.5% overlap)<br/>Preserves Parent Section Boundary<br/>Deterministic UUID5 Point IDs"]
   Chunking --> DocSummary["6. Whole-Document Summary Generation<br/>150-250 tokens for coarse routing"]
   Chunking --> Embed["7. BGE-M3 Dense + Sparse Embedding<br/>Batched in groups of 64"]
   DocSummary --> Embed
-  Embed --> Index["8. Atomic Database Updates<br/>Qdrant: chunks & documents collections<br/>MongoDB: doc & job status ready"]
+  Embed --> Index["8. Atomic Database Updates<br/>Qdrant: chunks and documents collections<br/>MongoDB: doc and job status ready"]
   Index --> Ready["Document Fully Ready for Search"]
 
-  class Upload,S1,Enqueue,Docling,Sanitize,Chunking,DocSummary,Embed,Index cStep
-  class V1,V2 cDecision
-  class S_Dedup,Ready cSuccess
-  class F1,F2 cFailure
+  class Upload,S1,Enqueue,Docling,Sanitize,Chunking,DocSummary,Embed,Index cStep;
+  class V1,V2 cDecision;
+  class S_Dedup,Ready cSuccess;
+  class F1,F2 cFailure;
 ```
+
 
 ---
 
@@ -211,13 +212,13 @@ flowchart TD
   Rerank --> Budget["context_budget<br/>Swap chunks for full parent sections<br/>Deduplicate parent blocks<br/>Enforce 1800 token budget"]
   Budget --> GenCite["generate_cite<br/>Stream tokens via SSE<br/>Parse citation markers<br/>Drop hallucinated markers"]
   ShortCircuit --> GenCite
-  GenCite --> FinalAnswer["Final Answer + Verified Citations"]
+  GenCite --> FinalAnswer["Final Answer and Verified Citations"]
 
-  class Q cStart
-  class CP,RR1,RRM,ACC,Rewrite,Rerank,Budget,GenCite cProc
-  class PlanCheck,EmptyCheck,PathCheck,SuffCheck cCheck
-  class FinalAnswer cOut
-  class ShortCircuit cStop
+  class Q cStart;
+  class CP,RR1,RRM,ACC,Rewrite,Rerank,Budget,GenCite cProc;
+  class PlanCheck,EmptyCheck,PathCheck,SuffCheck cCheck;
+  class FinalAnswer cOut;
+  class ShortCircuit cStop;
 ```
 
 ---
@@ -234,19 +235,20 @@ flowchart LR
   classDef cDropped fill:#fee2e2,stroke:#ef4444,stroke-width:2px,color:#0f172a;
   classDef cAction fill:#e0f2fe,stroke:#2563eb,stroke-width:2px,color:#0f172a;
 
-  LLM["Raw LLM Output Stream<br/>'Solar flares disrupt satellites #91;doc:p4:c12#93;.'"] --> Parse["Regex Tag Extractor<br/>Finds #91;doc_id:page:chunk_id#93;"]
-  Parse --> Check{"Does chunk_id exist in<br/>Verified Context Catalog?"}
+  LLM["Raw LLM Output Stream<br/>Solar flares disrupt satellites (doc:p4:c12)"] --> Parse["Regex Tag Extractor<br/>Extracts doc_id:page:chunk_id markers"]
+  Parse --> Check{"Chunk ID in<br/>Context Catalog?"}
   
   Check -->|Match Found| ReDerive["Re-derive doc_id and page<br/>from trusted backend state"]
-  ReDerive --> UIChip["Render Verified Citation Chip<br/>Interactive snippet popover<br/>Document title & page number"]
+  ReDerive --> UIChip["Render Verified Citation Chip<br/>Interactive snippet popover<br/>Document title and page number"]
 
-  Check -->|No Match - Hallucination| Strip["Strip Marker Entirely<br/>Never shown to user"]
+  Check -->|No Match / Hallucinated| Strip["Strip Marker Entirely<br/>Never shown to user"]
 
-  class LLM cSource
-  class Parse,Check,ReDerive cAction
-  class UIChip cVerified
-  class Strip cDropped
+  class LLM cSource;
+  class Parse,Check,ReDerive cAction;
+  class UIChip cVerified;
+  class Strip cDropped;
 ```
+
 
 ---
 

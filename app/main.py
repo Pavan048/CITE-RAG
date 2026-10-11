@@ -29,6 +29,18 @@ _FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 async def lifespan(app: FastAPI):
     qdrant_service.ensure_collections()
     mongo_service.ensure_indexes()
+
+    # Embedding drift detection: alert if documents were indexed with an embedding model different from current settings
+    drifted_docs = mongo_service.find_documents_with_different_embedding_model(settings.embedding_model)
+    if drifted_docs:
+        import logging
+        logging.getLogger(__name__).warning(
+            "EMBEDDING DRIFT DETECTED: %d documents were indexed with a different embedding model than configured (%s). "
+            "Re-indexing is recommended to avoid retrieval quality degradation.",
+            len(drifted_docs),
+            settings.embedding_model,
+        )
+
     # Before starting fresh workers: fail out any job stranded by the *previous* process's exit
     # (see recover_stranded_jobs()'s docstring for why that's a clean failure, not a resume).
     recover_stranded_jobs()

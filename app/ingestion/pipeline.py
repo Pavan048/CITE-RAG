@@ -37,6 +37,7 @@ class IngestionJob(BaseModel):
     content_hash: str
     llm_api_key: str
     llm_model: str
+    expected_page_count: int | None = None
 
 
 class QueueFullError(Exception):
@@ -107,7 +108,9 @@ async def run_ingestion_pipeline(job: IngestionJob) -> None:
         mongo_service.update_document(job.doc_id, status=DocumentStatus.PROCESSING)
         mongo_service.update_job(job.job_id, status=DocumentStatus.PROCESSING, stage=PipelineStage.PARSE, progress_pct=10)
 
-        parsed = await asyncio.to_thread(parse_document, job.file_path, job.filename, job.llm_api_key, job.llm_model)
+        parsed = await asyncio.to_thread(
+            parse_document, job.file_path, job.filename, job.llm_api_key, job.llm_model, job.expected_page_count
+        )
         if parsed.pages_failed:
             mongo_service.update_document(job.doc_id, pages_failed=parsed.pages_failed)
 
@@ -134,7 +137,13 @@ async def run_ingestion_pipeline(job: IngestionJob) -> None:
         # Only mark ready once both Qdrant writes above and this Mongo update have succeeded
         # (Section 2 Stage 5) — a crash between index_document() and here leaves the document in
         # PROCESSING, which is correct: it is not yet safe to call this document searchable.
-        mongo_service.update_document(job.doc_id, status=DocumentStatus.READY, page_count=parsed.page_count, content_hash=job.content_hash)
+        mongo_service.update_document(
+            job.doc_id,
+            status=DocumentStatus.READY,
+            page_count=parsed.page_count,
+            content_hash=job.content_hash,
+            embedding_model=settings.embedding_model,
+        )
         mongo_service.update_job(job.job_id, status=DocumentStatus.READY, stage=PipelineStage.READY, progress_pct=100)
 
         if os.path.exists(job.file_path):

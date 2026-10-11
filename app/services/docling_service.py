@@ -56,7 +56,7 @@ class DoclingService:
         options.images_scale = settings.docling_picture_images_scale
         self._converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)})
 
-    def convert(self, file_path: str) -> DoclingConvertResult:
+    def convert(self, file_path: str, expected_page_count: int | None = None) -> DoclingConvertResult:
         # Never buffer the whole PDF into a Python `bytes` object ourselves (Section 8: "never
         # load a full PDF into memory") — hand Docling a path and let its own backend stream pages.
         result: ConversionResult = self._converter.convert(file_path, raises_on_error=False)
@@ -66,20 +66,34 @@ class DoclingService:
         if result.status == ConversionStatus.FAILURE:
             raise DoclingParseError(f"Docling failed to parse {file_path}: {[e.error_message for e in result.errors]}")
 
-        status = (
-            DoclingConversionStatus.PARTIAL_SUCCESS
-            if result.status == ConversionStatus.PARTIAL_SUCCESS
-            else DoclingConversionStatus.SUCCESS
-        )
         failed_page_numbers = [
             page.page_no + 1
             for page in result.pages
             if page._backend is None or not page._backend.is_valid()
         ]
+        valid_page_numbers = {
+            page.page_no + 1
+            for page in result.pages
+            if page._backend is not None and page._backend.is_valid()
+        }
+        # Completeness check: catch silent parser truncation where trailing pages are omitted
+        if expected_page_count and expected_page_count > len(result.pages):
+            missing_pages = [p for p in range(1, expected_page_count + 1) if p not in valid_page_numbers]
+            for p in missing_pages:
+                if p not in failed_page_numbers:
+                    failed_page_numbers.append(p)
+            failed_page_numbers.sort()
+
+        status = (
+            DoclingConversionStatus.PARTIAL_SUCCESS
+            if (result.status == ConversionStatus.PARTIAL_SUCCESS or bool(failed_page_numbers))
+            else DoclingConversionStatus.SUCCESS
+        )
+        total_pages = expected_page_count or len(result.pages)
         return DoclingConvertResult(
             document=result.document,
             status=status,
-            page_count=len(result.pages),
+            page_count=total_pages,
             failed_page_numbers=failed_page_numbers,
         )
 

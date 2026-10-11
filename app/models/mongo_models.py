@@ -31,6 +31,7 @@ class DocumentRecord(BaseModel):
     updated_at: datetime
     pages_failed: list[int] = Field(default_factory=list)
     content_hash: str
+    embedding_model: str | None = None
 
     model_config = {"populate_by_name": True}
 

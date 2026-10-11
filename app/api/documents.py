@@ -35,6 +35,7 @@ async def upload_document(
     file: UploadFile = File(...),
     x_llm_key: str = Header(..., alias="X-LLM-Key"),
     x_llm_model: str | None = Header(None, alias="X-LLM-Model"),
+    x_replace_existing: bool = Header(False, alias="X-Replace-Existing"),
 ) -> UploadDocumentResponse:
     # `x_llm_key` is used only to construct the IngestionJob below, passed through to the one
     # LLM call site that needs it (Section 8) — it is never written into a log line, a Mongo
@@ -73,7 +74,7 @@ async def upload_document(
     # returns the SAME existing doc_id with an already-`ready` job — this literally is that
     # document already, so there is nothing new to parse, embed, or index.
     existing = mongo_service.find_ready_document_by_content_hash(content_hash)
-    if existing is not None:
+    if existing is not None and not x_replace_existing:
         os.remove(temp_path)
         job_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
@@ -81,6 +82,14 @@ async def upload_document(
             JobRecord(_id=job_id, doc_id=existing.id, status=DocumentStatus.READY, stage=PipelineStage.READY, progress_pct=100, created_at=now, updated_at=now)
         )
         return UploadDocumentResponse(doc_id=existing.id, job_id=job_id)
+
+    # Stale version eviction: if caller requests replacement, evict previous version with same filename
+    if x_replace_existing and file.filename:
+        old_doc = mongo_service.find_ready_document_by_filename(file.filename)
+        if old_doc:
+            qdrant_service.delete_document(old_doc.id)
+            mongo_service.delete_document(old_doc.id)
+            semantic_cache.clear()
 
     doc_id = str(uuid.uuid4())
     job_id = str(uuid.uuid4())
@@ -102,7 +111,7 @@ async def upload_document(
         enqueue_ingestion_job(
             IngestionJob(
                 doc_id=doc_id, job_id=job_id, file_path=final_path, filename=file.filename or "document.pdf",
-                content_hash=content_hash, llm_api_key=x_llm_key, llm_model=llm_model,
+                content_hash=content_hash, llm_api_key=x_llm_key, llm_model=llm_model, expected_page_count=page_count,
             )
         )
     except QueueFullError as e:
@@ -111,6 +120,7 @@ async def upload_document(
         raise HTTPException(status_code=503, detail=str(e)) from e
 
     return UploadDocumentResponse(doc_id=doc_id, job_id=job_id)
+
 
 
 @router.get("/v1/documents", response_model=list[DocumentListItem])

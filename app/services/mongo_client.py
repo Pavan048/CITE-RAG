@@ -49,6 +49,22 @@ class MongoService:
         doc = self.documents.find_one({"content_hash": content_hash, "status": DocumentStatus.READY.value})
         return DocumentRecord.model_validate(doc) if doc else None
 
+    def find_ready_document_by_filename(self, filename: str) -> DocumentRecord | None:
+        """Finds the most recently uploaded ready document with the same filename (for version replacement)."""
+        doc = self.documents.find_one(
+            {"filename": filename, "status": DocumentStatus.READY.value},
+            sort=[("uploaded_at", -1)],
+        )
+        return DocumentRecord.model_validate(doc) if doc else None
+
+    def find_documents_with_different_embedding_model(self, current_model: str) -> list[DocumentRecord]:
+        """Detects embedding drift: documents indexed with a different model version."""
+        cursor = self.documents.find({
+            "status": DocumentStatus.READY.value,
+            "embedding_model": {"$exists": True, "$ne": current_model},
+        })
+        return [DocumentRecord.model_validate(d) for d in cursor]
+
     def list_documents(self) -> list[DocumentRecord]:
         return [DocumentRecord.model_validate(d) for d in self.documents.find()]
 
@@ -60,6 +76,7 @@ class MongoService:
         page_count: int | None = None,
         pages_failed: list[int] | None = None,
         content_hash: str | None = None,
+        embedding_model: str | None = None,
     ) -> None:
         update: dict[str, object] = {"updated_at": _utcnow()}
         if status is not None:
@@ -70,6 +87,8 @@ class MongoService:
             update["pages_failed"] = pages_failed
         if content_hash is not None:
             update["content_hash"] = content_hash
+        if embedding_model is not None:
+            update["embedding_model"] = embedding_model
         self.documents.update_one({"_id": doc_id}, {"$set": update})
 
     def delete_document(self, doc_id: str) -> None:

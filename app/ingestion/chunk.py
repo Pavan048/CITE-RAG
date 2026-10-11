@@ -99,6 +99,41 @@ def _split_oversized_unit(unit: str, page_number: int, target_tokens: int, encod
     return [(encoding.decode(tokens[i : i + target_tokens]), page_number) for i in range(0, len(tokens), target_tokens)]
 
 
+def _split_table_rows(table_text: str, max_tokens: int, encoding: tiktoken.Encoding) -> list[str]:
+    """Splits oversized markdown tables by row boundaries while preserving header rows on every chunk."""
+    if len(encoding.encode(table_text)) <= max_tokens:
+        return [table_text]
+
+    lines = [line for line in table_text.splitlines() if line.strip()]
+    if len(lines) <= 2:
+        return [table_text]
+
+    # Assume first two lines are header and separator (| col1 | col2 |\n| --- | --- |)
+    header = "\n".join(lines[:2])
+    header_tokens = len(encoding.encode(header))
+    data_rows = lines[2:]
+
+    chunks: list[str] = []
+    current_rows: list[str] = []
+    current_tokens = header_tokens
+
+    for row in data_rows:
+        row_tokens = len(encoding.encode(row))
+        if current_rows and (current_tokens + row_tokens > max_tokens):
+            chunk_content = header + "\n" + "\n".join(current_rows)
+            chunks.append(chunk_content)
+            current_rows = [row]
+            current_tokens = header_tokens + row_tokens
+        else:
+            current_rows.append(row)
+            current_tokens += row_tokens
+
+    if current_rows:
+        chunks.append(header + "\n" + "\n".join(current_rows))
+
+    return chunks or [table_text]
+
+
 def _group_into_sections(elements: list[ParsedElement]) -> list[list[ParsedElement]]:
     sections: list[list[ParsedElement]] = []
     current: list[ParsedElement] = []
@@ -129,11 +164,19 @@ def chunk_document(parsed: ParsedDocument, doc_id: str) -> tuple[list[tuple[str,
             ParentBlockRecord(parent_block_id=parent_block_id, doc_id=doc_id, text="\n\n".join(t for _, t in sanitized))
         )
 
-        # Tables and image captions are already atomic (Section 2 Stage 2) — one chunk each,
-        # never merged into the text-window pass below.
+        # Tables: preserved whole up to table_max_tokens; oversized tables split on row boundaries
+        # with headers duplicated onto every slice so columns are never orphaned.
+        # Image captions: atomic one chunk each.
         text_units: list[tuple[ParsedElement, str]] = []
         for el, text in sanitized:
-            if el.content_type != ContentType.TEXT:
+            if el.content_type == ContentType.TABLE:
+                table_slices = _split_table_rows(text, settings.table_max_tokens, encoding)
+                for tbl_text in table_slices:
+                    chunks.append(
+                        _make_chunk(doc_id, chunk_index, el.page_number, section_title, ContentType.TABLE, parent_block_id, tbl_text, encoding)
+                    )
+                    chunk_index += 1
+            elif el.content_type != ContentType.TEXT:
                 chunks.append(
                     _make_chunk(doc_id, chunk_index, el.page_number, section_title, el.content_type, parent_block_id, text, encoding)
                 )

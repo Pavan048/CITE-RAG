@@ -79,8 +79,14 @@ def _caption_figure(image, filename: str, page_number: int, llm_api_key: str, ll
     return llm_client.caption_image(prompt=prompt, image_bytes=buf.getvalue(), api_key=llm_api_key, model=llm_model)
 
 
-def parse_document(file_path: str, filename: str, llm_api_key: str, llm_model: str) -> ParsedDocument:
-    result = docling_service.convert(file_path)
+def parse_document(
+    file_path: str,
+    filename: str,
+    llm_api_key: str,
+    llm_model: str,
+    expected_page_count: int | None = None,
+) -> ParsedDocument:
+    result = docling_service.convert(file_path, expected_page_count=expected_page_count)
     doc = result.document
 
     elements: list[ParsedElement] = []

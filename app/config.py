@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # --- Chunking (Section 1, Section 2 Stage 3) ---
     chunk_target_tokens: int = Field(default=512)
     chunk_overlap_ratio: float = Field(default=0.125)  # midpoint of the 10-15% band
+    table_max_tokens: int = Field(default=1024)  # table-aware chunking threshold
     doc_summary_min_tokens: int = Field(default=150)
     doc_summary_max_tokens: int = Field(default=250)
     # A 2000-page document's full extracted text can't go into one summarization prompt; this caps
@@ -45,6 +46,7 @@ class Settings(BaseSettings):
     embedding_batch_size: int = Field(default=64)
 
     # --- Embedding / reranker self-hosted services (Section 1) ---
+    embedding_model: str = Field(default="BAAI/bge-m3")
     embedding_service_url: str = Field(default="http://localhost:8001")
     embedding_dim: int = Field(default=1024)
     reranker_service_url: str = Field(default="http://localhost:8002")

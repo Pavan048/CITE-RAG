@@ -49,13 +49,10 @@ class MongoService:
         doc = self.documents.find_one({"content_hash": content_hash, "status": DocumentStatus.READY.value})
         return DocumentRecord.model_validate(doc) if doc else None
 
-    def find_ready_document_by_filename(self, filename: str) -> DocumentRecord | None:
-        """Finds the most recently uploaded ready document with the same filename (for version replacement)."""
-        doc = self.documents.find_one(
-            {"filename": filename, "status": DocumentStatus.READY.value},
-            sort=[("uploaded_at", -1)],
-        )
-        return DocumentRecord.model_validate(doc) if doc else None
+    def find_ready_documents_by_filename(self, filename: str) -> list[DocumentRecord]:
+        """Finds all ready documents with the same filename (for version replacement)."""
+        cursor = self.documents.find({"filename": filename, "status": DocumentStatus.READY.value})
+        return [DocumentRecord.model_validate(d) for d in cursor]
 
     def find_documents_with_different_embedding_model(self, current_model: str) -> list[DocumentRecord]:
         """Detects embedding drift: documents indexed with a different model version."""

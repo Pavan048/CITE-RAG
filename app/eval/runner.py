@@ -168,3 +168,31 @@ def run_benchmark(
         total_cost_usd=round(total_cost, 6),
         results=results,
     )
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Run CITE-RAG offline evaluation benchmark")
+    parser.add_argument(
+        "--api-key",
+        default=os.getenv("X_LLM_KEY") or os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"),
+        help="BYOK LLM API Key",
+    )
+    parser.add_argument("--model", default=None, help="LLM model string (e.g. openai/gpt-4o-mini)")
+    parser.add_argument("--samples", default=None, help="Path to golden samples JSONL file")
+    args = parser.parse_args()
+
+    if not args.api_key:
+        print("Error: --api-key required or set LLM_API_KEY / OPENAI_API_KEY environment variable")
+        raise SystemExit(1)
+
+    print(f"Running benchmark on {args.samples or _DEFAULT_GOLDEN_PATH}...")
+    report = run_benchmark(llm_api_key=args.api_key, llm_model=args.model, samples_path=args.samples)
+    print("\n--- Benchmark Summary ---")
+    print(f"Total Samples: {report.total_samples}")
+    print(f"Avg Keyword Recall: {report.avg_keyword_recall * 100:.1f}%")
+    print(f"Avg Citations / Query: {report.avg_citations_per_query:.1f}")
+    print(f"Out-of-Scope Abstention Accuracy: {report.out_of_scope_abstention_accuracy * 100:.1f}%")
+    print(f"Avg Latency: {report.avg_latency_ms:.1f} ms")
+    print(f"Total Tokens: {report.total_tokens}")
+    print(f"Total Cost: ${report.total_cost_usd:.5f}")

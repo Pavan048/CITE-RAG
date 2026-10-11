@@ -83,12 +83,13 @@ async def upload_document(
         )
         return UploadDocumentResponse(doc_id=existing.id, job_id=job_id)
 
-    # Stale version eviction: if caller requests replacement, evict previous version with same filename
+    # Stale version eviction: if caller requests replacement, evict previous version(s) with same filename
     if x_replace_existing and file.filename:
-        old_doc = mongo_service.find_ready_document_by_filename(file.filename)
-        if old_doc:
+        old_docs = mongo_service.find_ready_documents_by_filename(file.filename)
+        for old_doc in old_docs:
             qdrant_service.delete_document(old_doc.id)
             mongo_service.delete_document(old_doc.id)
+        if old_docs:
             semantic_cache.clear()
 
     doc_id = str(uuid.uuid4())
